@@ -2,17 +2,33 @@ import streamlit as st
 import cv2
 import numpy as np
 
-img_file_buffer = st.camera_input("Take a picture")
+# Create a Streamlit app title
+st.title("Live Video Stream in Black and White")
 
-if img_file_buffer is not None:
-    # To read image file buffer with OpenCV:
-    bytes_data = img_file_buffer.getvalue()
-    cv2_img = cv2.imdecode(np.frombuffer(bytes_data, np.uint8), cv2.IMREAD_COLOR)
+# Start capturing video from webcam
+video_capture = cv2.VideoCapture(0)
 
-    # Check the type of cv2_img:
-    # Should output: <class 'numpy.ndarray'>
-    st.write(type(cv2_img))
+# Streamlit component to show the video
+if video_capture.isOpened():
+    while True:
+        ret, frame = video_capture.read()  # Read a frame from the webcam
+        if not ret:
+            st.error("Failed to capture video")
+            break
 
-    # Check the shape of cv2_img:
-    # Should output shape: (height, width, channels)
-    st.write(cv2_img.shape)
+        # Convert the frame to black and white
+        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        # Convert the frame to bytes for Streamlit
+        _, buffer = cv2.imencode('.jpg', gray_frame)
+        frame_bytes = buffer.tobytes()
+
+        # Display the black and white video frame in Streamlit
+        st.image(frame_bytes, channels="GRAY")
+
+        # Add a stop button to end the video capture
+        if st.button("Stop"):
+            break
+
+# Release the video capture when done
+video_capture.release()
