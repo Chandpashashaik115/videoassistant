@@ -10,11 +10,11 @@ def main():
         st.session_state['run'] = False
 
     # "Start" button to toggle webcam streaming
-    if st.button("Start"):
+    if st.button("Start", key="start_button"):
         st.session_state['run'] = True
 
     # "Stop" button to toggle off webcam streaming
-    if st.button("Stop"):
+    if st.button("Stop", key="stop_button"):
         st.session_state['run'] = False
 
     # Placeholder for video stream
@@ -22,7 +22,7 @@ def main():
 
     # If "Start" has been pressed, capture video from webcam
     if st.session_state['run']:
-        cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(0)  # Change 0 to 1 or another index if necessary
 
         # Check if webcam is opened correctly
         if not cap.isOpened():
