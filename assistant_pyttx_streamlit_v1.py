@@ -1,20 +1,18 @@
 import base64
-import os
 import time
-import wave
-import numpy as np
-import threading  # For running TTS asynchronously
-import streamlit as st
 import cv2
-from cv2 import imencode
+import streamlit as st
+from cv2 import VideoCapture, imencode
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema.messages import SystemMessage
 from langchain_community.chat_message_histories import ChatMessageHistory
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_google_genai import ChatGoogleGenerativeAI
-from speech_recognition import Microphone, Recognizer, UnknownValueError
+from speech_recognition import Recognizer, UnknownValueError
 import pyttsx3
+import threading  # For running TTS asynchronously
+
 
 class Assistant:
     def __init__(self, model):
@@ -23,7 +21,7 @@ class Assistant:
         self.last_response = None
         self.tts_lock = threading.Lock()
 
-    def answer(self, prompt, image):
+    def answer(self, prompt, image, stop_listening_callback):
         if not prompt:
             return
 
@@ -38,16 +36,16 @@ class Assistant:
 
         response = self.chain.invoke(
             {"prompt": prompt, "image_base64": image_base64},
-            config={"configurable": {"session_id": "unused"}} 
+            config={"configurable": {"session_id": "unused"}},
         ).strip()
 
         self.last_response = response
         print("Response:", response)
         
         if response:
-            self._tts(response)
+            self._tts(response, stop_listening_callback)
 
-    def _tts(self, response):
+    def _tts(self, response, stop_listening_callback):
         """Convert the response text to speech using pyttsx3 in a separate thread."""
         def speak():
             with self.tts_lock:
@@ -61,6 +59,9 @@ class Assistant:
                 
                 # Stop and reset engine after finishing
                 engine.stop()
+
+            # After speaking, resume listening
+            stop_listening_callback()  # This will restart the microphone listener
 
         # Run TTS in a separate thread to avoid blocking the main thread
         threading.Thread(target=speak).start()
@@ -108,31 +109,19 @@ class Assistant:
             history_messages_key="chat_history",
         )
 
-def audio_callback(recognizer, audio):
-    """Process audio input and send it to the assistant."""
-    try:
-        prompt = recognizer.recognize_whisper(audio, model="base", language="english")
-        assistant.answer(prompt, current_image)  # Process the audio input
-    except UnknownValueError:
-        print("There was an error processing the audio.")
 
-# Initialize the model
+def audio_callback(prompt, assistant):
+    """Process audio input and send it to the assistant."""
+    if prompt:
+        assistant.answer(prompt, webcam_frame, resume_listening)  # Process the audio input
+
+
+# Initialize recognizer
+recognizer = Recognizer()
+
+# Initialize webcam stream and the model
 model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
 assistant = Assistant(model)
-
-# Initialize recognizer and microphone
-recognizer = Recognizer()
-microphone = Microphone()
-
-# Start listening to the microphone in a separate thread
-def start_listening():
-    with microphone as source:
-        recognizer.adjust_for_ambient_noise(source)
-        stop_listening_callback = recognizer.listen_in_background(microphone, audio_callback)
-
-# Start the audio listening thread
-listening_thread = threading.Thread(target=start_listening)
-listening_thread.start()
 
 # Streamlit UI
 st.title("SAGE: A Video Assistant")
@@ -143,34 +132,38 @@ col1, col2 = st.columns([2, 1])
 
 with col1:
     st.write("### Webcam Feed")
-    current_image = st.camera_input("Take a picture")
+    webcam_frame = st.camera_input("Take a picture")  # Use Streamlit's camera input
+
+    if webcam_frame is not None:
+        # Load the image as a numpy array
+        file_bytes = np.asarray(bytearray(webcam_frame.read()), dtype=np.uint8)
+        image = cv2.imdecode(file_bytes, 1)
 
 with col2:
-    st.write("### Chat")
-    prompt_placeholder = st.empty()
-    response_placeholder = st.empty()
+    st.write("### Audio Input")
+    audio_value = st.audio_input("Record a voice message", type='audio/wav')
 
-# Loop to display chat messages
+    if audio_value is not None:
+        prompt = recognizer.recognize_whisper(audio_value, model="base", language="english")
+        audio_callback(prompt, assistant)
+
+# Loop to update the video frame and display chat messages
 while True:
-    if current_image is not None:
-        # Process the image if available
-        assistant.answer(assistant.last_prompt, current_image.read())
+    if webcam_frame is not None:
+        frame = webcam_frame
+        st.image(frame, channels="BGR", caption="Webcam Feed")
         
         # Display the chat history
         if assistant.last_prompt and assistant.last_response:
-            prompt_placeholder.markdown(f"*Prompt:* {assistant.last_prompt}")
-            response_placeholder.markdown(f"*Response:* {assistant.last_response}")
+            st.markdown(f"*Prompt:* {assistant.last_prompt}")
+            st.markdown(f"*Response:* {assistant.last_response}")
         elif assistant.last_response:
-            response_placeholder.markdown(f"*Response:* {assistant.last_response}")
+            st.markdown(f"*Response:* {assistant.last_response}")
         else:
-            prompt_placeholder.markdown("*Prompt:* Waiting for input...")
-            response_placeholder.markdown("*Response:* Waiting for response...")
-
-    else:
-        # If no image is captured
-        prompt_placeholder.markdown("*Prompt:* Waiting for input...")
-        response_placeholder.markdown("*Response:* Waiting for response...")
+            st.markdown("*Prompt:* Waiting for input...")
+            st.markdown("*Response:* Waiting for response...")
 
     time.sleep(0.1)  # Adjust the sleep time as necessary
 
-# Note: The thread will keep running and listening to audio input
+# Stop the webcam stream when the app ends
+# Add cleanup code if needed
