@@ -11,7 +11,10 @@ enable_camera = st.checkbox("Enable camera")
 
 # Start and Stop buttons
 if st.button("Start"):
-    st.session_state.camera_enabled = True
+    if enable_camera:
+        st.session_state.camera_enabled = True
+    else:
+        st.warning("Please enable the camera to start streaming.")
 
 if st.button("Stop"):
     st.session_state.camera_enabled = False
@@ -20,31 +23,28 @@ if st.button("Stop"):
 if enable_camera and st.session_state.camera_enabled:
     st.info("Streaming live black-and-white camera feed...")
 
-    # Access the webcam (0 is typically the default webcam)
-    cap = cv2.VideoCapture(0)
-
     # Create a placeholder in the Streamlit app for the video frames
     frame_placeholder = st.empty()
 
     # Loop to continuously capture frames and display them
-    while st.session_state.camera_enabled and cap.isOpened():
-        ret, frame = cap.read()
+    while st.session_state.camera_enabled:
+        # Use the camera input from the user
+        frame = st.camera_input("Take a picture", key="camera")
 
-        if not ret:
-            st.error("Failed to capture image.")
-            break
+        if frame is not None:
+            # Read the image as an array
+            image = np.array(frame)
 
-        # Convert the frame to grayscale (black and white)
-        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            # Convert the frame to grayscale (black and white)
+            gray_frame = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-        # Convert the grayscale frame back to RGB format for displaying in Streamlit
-        rgb_frame = cv2.cvtColor(gray_frame, cv2.COLOR_GRAY2RGB)
+            # Convert the grayscale frame back to RGB format for displaying in Streamlit
+            rgb_frame = cv2.cvtColor(gray_frame, cv2.COLOR_GRAY2RGB)
 
-        # Display the frame in the placeholder
-        frame_placeholder.image(rgb_frame, channels='RGB')
-
-    # Release the video capture object
-    cap.release()
+            # Display the frame in the placeholder
+            frame_placeholder.image(rgb_frame, channels='RGB')
+        else:
+            st.warning("Waiting for the camera input...")
 
 # Display camera status
 if st.session_state.camera_enabled:
