@@ -1,9 +1,11 @@
 import base64
-from threading import Lock
+import os
 import time
-
-import cv2
+import wave
+import numpy as np
+import threading  # For running TTS asynchronously
 import streamlit as st
+import cv2
 from cv2 import imencode
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.schema.messages import SystemMessage
@@ -13,7 +15,6 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_google_genai import ChatGoogleGenerativeAI
 from speech_recognition import Microphone, Recognizer, UnknownValueError
 import pyttsx3
-import threading  # For running TTS asynchronously
 
 class Assistant:
     def __init__(self, model):
@@ -22,7 +23,7 @@ class Assistant:
         self.last_response = None
         self.tts_lock = threading.Lock()
 
-    def answer(self, prompt, image, stop_listening_callback):
+    def answer(self, prompt, image):
         if not prompt:
             return
 
@@ -37,16 +38,16 @@ class Assistant:
 
         response = self.chain.invoke(
             {"prompt": prompt, "image_base64": image_base64},
-            config={"configurable": {"session_id": "unused"}},
+            config={"configurable": {"session_id": "unused"}} 
         ).strip()
 
         self.last_response = response
         print("Response:", response)
         
         if response:
-            self._tts(response, stop_listening_callback)
-               
-    def _tts(self, response, stop_listening_callback):
+            self._tts(response)
+
+    def _tts(self, response):
         """Convert the response text to speech using pyttsx3 in a separate thread."""
         def speak():
             with self.tts_lock:
@@ -61,14 +62,10 @@ class Assistant:
                 # Stop and reset engine after finishing
                 engine.stop()
 
-            # After speaking, resume listening
-            stop_listening_callback()  # This will restart the microphone listener
-
         # Run TTS in a separate thread to avoid blocking the main thread
         threading.Thread(target=speak).start()
 
     def _create_inference_chain(self, model):
- 
         SYSTEM_PROMPT = """
         You are being used to power a video assistant and you have knowledge on celebrities that will use the chat history and the image 
         provided by the user to answer its questions. Wait for the user prompt
@@ -115,35 +112,27 @@ def audio_callback(recognizer, audio):
     """Process audio input and send it to the assistant."""
     try:
         prompt = recognizer.recognize_whisper(audio, model="base", language="english")
-        assistant.answer(prompt, current_image, resume_listening)  # Process the audio input
-
+        assistant.answer(prompt, current_image)  # Process the audio input
     except UnknownValueError:
         print("There was an error processing the audio.")
 
-def stop_listening():
-    """Stop the microphone listener."""
-    global stop_listening_callback
-    if stop_listening_callback:
-        stop_listening_callback(wait_for_stop=False)
-
-def resume_listening():
-    """Resume listening to the microphone after the assistant finishes responding."""
-    global stop_listening_callback
-    stop_listening_callback = recognizer.listen_in_background(microphone, audio_callback)
+# Initialize the model
+model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
+assistant = Assistant(model)
 
 # Initialize recognizer and microphone
 recognizer = Recognizer()
 microphone = Microphone()
 
 # Start listening to the microphone in a separate thread
-with microphone as source:
-    recognizer.adjust_for_ambient_noise(source)
+def start_listening():
+    with microphone as source:
+        recognizer.adjust_for_ambient_noise(source)
+        stop_listening_callback = recognizer.listen_in_background(microphone, audio_callback)
 
-stop_listening_callback = recognizer.listen_in_background(microphone, audio_callback)
-
-# Initialize the model
-model = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest")
-assistant = Assistant(model)
+# Start the audio listening thread
+listening_thread = threading.Thread(target=start_listening)
+listening_thread.start()
 
 # Streamlit UI
 st.title("SAGE: A Video Assistant")
@@ -165,7 +154,7 @@ with col2:
 while True:
     if current_image is not None:
         # Process the image if available
-        assistant.answer(assistant.last_prompt, current_image.read(), resume_listening)
+        assistant.answer(assistant.last_prompt, current_image.read())
         
         # Display the chat history
         if assistant.last_prompt and assistant.last_response:
@@ -176,6 +165,7 @@ while True:
         else:
             prompt_placeholder.markdown("*Prompt:* Waiting for input...")
             response_placeholder.markdown("*Response:* Waiting for response...")
+
     else:
         # If no image is captured
         prompt_placeholder.markdown("*Prompt:* Waiting for input...")
@@ -183,5 +173,4 @@ while True:
 
     time.sleep(0.1)  # Adjust the sleep time as necessary
 
-# Stop the microphone listener when the app ends
-stop_listening()
+# Note: The thread will keep running and listening to audio input
