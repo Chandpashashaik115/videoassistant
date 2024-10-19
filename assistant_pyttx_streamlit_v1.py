@@ -26,7 +26,7 @@ def main():
 
         # Check if webcam is opened correctly
         if not cap.isOpened():
-            st.error("Cannot access the webcam!")
+            st.error("Cannot access the webcam! Please check permissions or webcam connection.")
             return
 
         # Loop to read and display frames in the Streamlit app
@@ -48,6 +48,10 @@ def main():
 
         # Release the webcam and close the stream
         cap.release()
+
+    # Give user a way to provide camera access if denied
+    if st.button("Request Camera Access", key="request_camera_access"):
+        st.warning("Please refresh the page and allow camera access when prompted.")
 
 if __name__ == "__main__":
     main()
