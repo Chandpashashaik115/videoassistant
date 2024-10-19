@@ -22,32 +22,35 @@ if img_file_buffer is not None:
 
     # Display the black and white image
     st.image(gray_img, channels="GRAY", caption="Captured Image in Black and White")
-    
-# For continuous streaming, simulate a video feed
-# Using OpenCV to create a fake video stream from webcam
+
+# For continuous streaming, create a button to start the video stream
 if st.button("Start Video Stream"):
-    cap = cv2.VideoCapture(0)  # Start video capture from webcam
+    cap = cv2.VideoCapture(0)  # Start video capture from the webcam
 
-    # Continuously capture video frames
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            st.error("Failed to capture video")
-            break
-        
-        # Convert the frame to black and white
-        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        # Convert the frame to bytes for Streamlit
-        _, buffer = cv2.imencode('.jpg', gray_frame)
-        frame_bytes = buffer.tobytes()
+    if not cap.isOpened():
+        st.error("Cannot open webcam")
+    else:
+        # Continuously capture video frames
+        while True:
+            ret, frame = cap.read()  # Read a frame from the webcam
+            if not ret:
+                st.error("Failed to capture video")
+                break
+            
+            # Convert the frame to black and white
+            gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        # Update the placeholder with the new frame
-        video_placeholder.image(frame_bytes, channels="GRAY")
+            # Convert the frame to bytes for Streamlit
+            _, buffer = cv2.imencode('.jpg', gray_frame)
+            frame_bytes = buffer.tobytes()
 
-        # Stop streaming when a button is pressed
-        if st.button("Stop Video Stream"):
-            break
+            # Update the placeholder with the new frame
+            video_placeholder.image(frame_bytes, channels="GRAY")
+
+            # Check if the Stop button is pressed
+            if st.button("Stop Video Stream"):
+                break
 
     # Release the video capture object
     cap.release()
+    video_placeholder.empty()  # Clear the video stream display when done
