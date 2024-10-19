@@ -1,57 +1,62 @@
 import cv2
 import streamlit as st
+from streamlit_webrtc import webrtc_streamer, VideoHTMLAttributes
 import numpy as np
+import av
 
-def main():
-    st.title("Webcam Stream in Black and White using OpenCV and Streamlit")
+st.title("OpenCV Filters on Video Stream")
 
-    # Initialize session state for start/stop control
-    if 'run' not in st.session_state:
-        st.session_state['run'] = False
+filter = "none"
 
-    # "Start" button to toggle webcam streaming
-    if st.button("Start", key="start_button"):
-        st.session_state['run'] = True
 
-    # "Stop" button to toggle off webcam streaming
-    if st.button("Stop", key="stop_button"):
-        st.session_state['run'] = False
+def transform(frame: av.VideoFrame):
+    img = frame.to_ndarray(format="bgr24")
 
-    # Placeholder for video stream
-    frame_placeholder = st.empty()
+    if filter == "blur":
+        img = cv2.GaussianBlur(img, (21, 21), 0)
+    elif filter == "canny":
+        img = cv2.cvtColor(cv2.Canny(img, 100, 200), cv2.COLOR_GRAY2BGR)
+    elif filter == "grayscale":
+        # We convert the image twice because the first conversion returns a 2D array.
+        # the second conversion turns it back to a 3D array.
+        img = cv2.cvtColor(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), cv2.COLOR_GRAY2BGR)
+    elif filter == "sepia":
+        kernel = np.array(
+            [[0.272, 0.534, 0.131], [0.349, 0.686, 0.168], [0.393, 0.769, 0.189]]
+        )
+        img = cv2.transform(img, kernel)
+    elif filter == "invert":
+        img = cv2.bitwise_not(img)
+    elif filter == "none":
+        pass
 
-    # If "Start" has been pressed, capture video from webcam
-    if st.session_state['run']:
-        cap = cv2.VideoCapture(0)  # Change 0 to 1 or another index if necessary
+    return av.VideoFrame.from_ndarray(img, format="bgr24")
 
-        # Check if webcam is opened correctly
-        if not cap.isOpened():
-            st.error("Cannot access the webcam! Please check permissions or webcam connection.")
-            return
 
-        # Loop to read and display frames in the Streamlit app
-        while st.session_state['run']:
-            ret, frame = cap.read()
-            if not ret:
-                st.warning("Failed to grab frame")
-                break
+col1, col2, col3, col4, col5, col6 = st.columns([1, 1, 1, 1, 1, 1])
 
-            # Convert the color from BGR (OpenCV format) to Grayscale
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+with col1:
+    if st.button("None"):
+        filter = "none"
+with col2:
+    if st.button("Blur"):
+        filter = "blur"
+with col3:
+    if st.button("Grayscale"):
+        filter = "grayscale"
+with col4:
+    if st.button("Sepia"):
+        filter = "sepia"
+with col5:
+    if st.button("Canny"):
+        filter = "canny"
+with col6:
+    if st.button("Invert"):
+        filter = "invert"
 
-            # Update the image in the Streamlit app
-            frame_placeholder.image(frame, channels="GRAY")
 
-            # Break the loop if the user clicks the "Stop" button
-            if not st.session_state['run']:
-                break
-
-        # Release the webcam and close the stream
-        cap.release()
-
-    # Give user a way to provide camera access if denied
-    if st.button("Request Camera Access", key="request_camera_access"):
-        st.warning("Please refresh the page and allow camera access when prompted.")
-
-if __name__ == "__main__":
-    main()
+webrtc_streamer(
+    key="streamer",
+    video_frame_callback=transform,
+    sendback_audio=False
+    )
