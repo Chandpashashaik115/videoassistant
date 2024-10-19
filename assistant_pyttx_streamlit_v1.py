@@ -1,53 +1,53 @@
-import streamlit as st
 import cv2
+import streamlit as st
 import numpy as np
 
-# Initialize the camera state
-if 'camera_enabled' not in st.session_state:
-    st.session_state.camera_enabled = False
+def main():
+    st.title("Webcam Stream in Black and White using OpenCV and Streamlit")
 
-# Checkbox to enable camera
-enable_camera = st.checkbox("Enable camera")
+    # Initialize session state for start/stop control
+    if 'run' not in st.session_state:
+        st.session_state['run'] = False
 
-# Start and Stop buttons
-if st.button("Start"):
-    if enable_camera:
-        st.session_state.camera_enabled = True
-    else:
-        st.warning("Please enable the camera to start streaming.")
+    # "Start" button to toggle webcam streaming
+    if st.button("Start"):
+        st.session_state['run'] = True
 
-if st.button("Stop"):
-    st.session_state.camera_enabled = False
+    # "Stop" button to toggle off webcam streaming
+    if st.button("Stop"):
+        st.session_state['run'] = False
 
-# Streaming live black-and-white feed using OpenCV
-if enable_camera and st.session_state.camera_enabled:
-    st.info("Streaming live black-and-white camera feed...")
-
-    # Create a placeholder in the Streamlit app for the video frames
+    # Placeholder for video stream
     frame_placeholder = st.empty()
 
-    # Loop to continuously capture frames and display them
-    while st.session_state.camera_enabled:
-        # Use the camera input from the user
-        frame = st.camera_input("Take a picture", key="camera")
+    # If "Start" has been pressed, capture video from webcam
+    if st.session_state['run']:
+        cap = cv2.VideoCapture(0)
 
-        if frame is not None:
-            # Read the image as an array
-            image = np.array(frame)
+        # Check if webcam is opened correctly
+        if not cap.isOpened():
+            st.error("Cannot access the webcam!")
+            return
 
-            # Convert the frame to grayscale (black and white)
-            gray_frame = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        # Loop to read and display frames in the Streamlit app
+        while st.session_state['run']:
+            ret, frame = cap.read()
+            if not ret:
+                st.warning("Failed to grab frame")
+                break
 
-            # Convert the grayscale frame back to RGB format for displaying in Streamlit
-            rgb_frame = cv2.cvtColor(gray_frame, cv2.COLOR_GRAY2RGB)
+            # Convert the color from BGR (OpenCV format) to Grayscale
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-            # Display the frame in the placeholder
-            frame_placeholder.image(rgb_frame, channels='RGB')
-        else:
-            st.warning("Waiting for the camera input...")
+            # Update the image in the Streamlit app
+            frame_placeholder.image(frame, channels="GRAY")
 
-# Display camera status
-if st.session_state.camera_enabled:
-    st.success("Camera is active and streaming.")
-else:
-    st.warning("Camera is not active. Click 'Start' to enable.")
+            # Break the loop if the user clicks the "Stop" button
+            if not st.session_state['run']:
+                break
+
+        # Release the webcam and close the stream
+        cap.release()
+
+if __name__ == "__main__":
+    main()
